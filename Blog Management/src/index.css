@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-gray-50 text-gray-700 font-sans;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-gray-900 font-bold tracking-tight;
+  }
+  h1 { @apply text-2xl sm:text-3xl; }
+  h2 { @apply text-xl sm:text-2xl; }
+  h3 { @apply text-lg; }
+  p { @apply leading-relaxed; }
+  a { @apply text-brand-600 hover:text-brand-700 transition-colors duration-150 ease-feather; }
+  ::selection { @apply bg-brand-200 text-gray-900; }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-2xl shadow-card hover:shadow-hover transition-shadow duration-200 ease-feather;
+  }
+  .input {
+    @apply block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white placeholder:text-gray-400;
+  }
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  
+  /* Animated Navigation Styles */
+  .navbar {
+    @apply relative flex items-center;
+  }
+  
+  .nav-link {
+    @apply relative z-10 text-gray-600 hover:text-gray-900 transition-colors duration-300;
+  }
+  
+  .nav-link.active {
+    @apply text-white duration-500;
+  }
+  
+  .navbar .active-box {
+    @apply absolute bg-brand-600 rounded-full -z-10 transition-[top,left,width,height] duration-500 ease-feather pointer-events-none;
+    transform: translateZ(0); /* Force hardware acceleration */
+  }
+}
