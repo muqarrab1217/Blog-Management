@@ -6,8 +6,12 @@ import { User } from '../../services/authService';
 import UserStatus from '../UserStatus';
 import Button from '../Button';
 import toast from 'react-hot-toast';
+import { useRealtime } from '../../contexts/RealtimeContext';
 
 function AdminCustomers() {
+  // Real-time context for Socket.IO updates
+  const { isConnected, getUserStatus, userStatuses } = useRealtime();
+  
   // Real user data from API
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,6 +40,7 @@ function AdminCustomers() {
     try {
       setIsLoading(true);
       const result = await userService.getAllUsers({ limit: 100 });
+      console.log('📋 Loaded users from API:', result.users?.map(u => ({ id: u.id, _id: u._id, name: u.name, isOnline: u.isOnline })));
       setUsers(result.users || []);
     } catch (error) {
       console.error('Failed to load users:', error);
@@ -53,7 +58,7 @@ function AdminCustomers() {
     }
   };
 
-  // Filter users based on search and filters
+  // Filter users based on search and filters with real-time status
   const filteredUsers = users.filter(user => {
     // Add null/undefined checks for user properties
     if (!user || !user.name || !user.email) {
@@ -63,9 +68,21 @@ function AdminCustomers() {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchTerm.toLowerCase());
     
+    // Get real-time status from Socket.IO context
+    const userId = user.id || user._id || '';
+    const realtimeStatus = getUserStatus(userId);
+    const isOnline = realtimeStatus ? realtimeStatus.isOnline : user.isOnline;
+    
+    // Debug logging
+    if (realtimeStatus) {
+      console.log(`👤 User ${user.name} real-time status:`, realtimeStatus);
+    } else {
+      console.log(`👤 User ${user.name} no real-time status, using fallback:`, user.isOnline);
+    }
+    
     const matchesStatus = statusFilter === 'all' || 
-                         (statusFilter === 'online' && user.isOnline) ||
-                         (statusFilter === 'offline' && !user.isOnline);
+                         (statusFilter === 'online' && isOnline) ||
+                         (statusFilter === 'offline' && !isOnline);
 
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
 
@@ -182,7 +199,22 @@ function AdminCustomers() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-            <p className="mt-2 text-gray-600">Monitor user activity and manage accounts.</p>
+            <div className="mt-2 text-gray-600">
+              Monitor user activity and manage accounts.
+              <span className={`ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                isConnected 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-red-100 text-red-800'
+              }`}>
+                <span className={`w-2 h-2 rounded-full mr-1 ${
+                  isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+                }`}></span>
+                {isConnected ? 'Real-time Connected' : 'Real-time Disconnected'}
+              </span>
+              <span className="ml-2 text-xs text-gray-500">
+                (Real-time statuses: {Array.from(userStatuses.values()).filter(u => u.isOnline).length} online)
+              </span>
+            </div>
           </div>
           <Button
             onClick={() => setShowBlogSearch(!showBlogSearch)}
@@ -474,7 +506,12 @@ function AdminCustomers() {
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.isOnline ? 'Active now' : formatLastActive(user.lastActive || '')}
+                      {(() => {
+                        const realtimeStatus = getUserStatus(user.id || user._id || '');
+                        const isOnline = realtimeStatus ? realtimeStatus.isOnline : user.isOnline;
+                        const lastActive = realtimeStatus ? realtimeStatus.lastActive : user.lastActive;
+                        return isOnline ? 'Active now' : formatLastActive(lastActive || '');
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`badge ${getSubscriptionColor(user.subscriptionPlan || 'Basic')}`}>

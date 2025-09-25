@@ -47,7 +47,8 @@ app.get('/api/health', (req, res) => {
     success: true,
     message: 'Blog Management API is running!',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV
+    environment: process.env.NODE_ENV,
+    socketIO: 'ready'
   });
 });
 
@@ -58,10 +59,17 @@ app.get('/api/health', (req, res) => {
 io.on('connection', async (socket) => {
   const userId = socket.handshake.query.userId;
   
-  console.log(`🔌 User ${userId} connected via Socket.IO`);
+  console.log(`🔌 Socket connection attempt from user: ${userId}`);
 
   if (!userId) {
     console.log('❌ No userId provided in socket connection');
+    socket.disconnect();
+    return;
+  }
+
+  // Validate userId format (should be a valid MongoDB ObjectId)
+  if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
+    console.log(`❌ Invalid userId format: ${userId}`);
     socket.disconnect();
     return;
   }
@@ -94,6 +102,9 @@ io.on('connection', async (socket) => {
       lastActive: updatedUser.lastActive,
       role: updatedUser.role
     });
+
+    // Store socket with user ID for easy reference
+    socket.userId = userId;
 
     // Handle user activity (heartbeat)
     socket.on('user_activity', async () => {
@@ -141,6 +152,32 @@ io.on('connection', async (socket) => {
   }
 });
 
+/**
+ * Periodic broadcast of all online users (every 30 seconds)
+ * This ensures all clients stay in sync with user statuses
+ */
+setInterval(async () => {
+  try {
+    const onlineUsers = await User.find({ isOnline: true })
+      .select('_id name email isOnline lastActive role')
+      .limit(100); // Limit to prevent large payloads
+
+    if (onlineUsers.length > 0) {
+      io.emit('online_users_update', onlineUsers.map(user => ({
+        userId: user._id,
+        name: user.name,
+        email: user.email,
+        isOnline: user.isOnline,
+        lastActive: user.lastActive,
+        role: user.role
+      })));
+      
+      console.log(`📡 Broadcasted ${onlineUsers.length} online users`);
+    }
+  } catch (error) {
+    console.error('Error broadcasting online users:', error);
+  }
+}, 30000); // Every 30 seconds
 
 // 404 handler
 app.use('*', (req, res) => {

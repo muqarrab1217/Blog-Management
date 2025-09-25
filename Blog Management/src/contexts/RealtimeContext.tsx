@@ -21,61 +21,19 @@ interface RealtimeProviderProps {
  * Manages real-time user activity tracking and Socket.IO connections
  */
 export function RealtimeProvider({ children }: RealtimeProviderProps) {
-  const { user, isAuthenticated } = useAuth();
+  const { user } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [userStatuses, setUserStatuses] = useState<Map<string, UserStatusData>>(new Map());
-
-  useEffect(() => {
-    if (isAuthenticated && user?.id) {
-      // Connect to Socket.IO when user is authenticated
-      socketService.connect(user.id);
-      setIsConnected(true);
-
-      // Listen for connection status changes
-      const checkConnection = () => {
-        setIsConnected(socketService.isConnected());
-      };
-
-      // Check connection status periodically
-      const connectionInterval = setInterval(checkConnection, 5000);
-
-      // Listen for user status changes
-      const handleStatusChange = (event: CustomEvent) => {
-        const userData = event.detail as UserStatusData;
-        updateUserStatus(userData);
-      };
-
-      window.addEventListener('userStatusChange', handleStatusChange as EventListener);
-
-      // Send periodic activity heartbeat
-      const activityInterval = setInterval(() => {
-        if (socketService.isConnected()) {
-          socketService.sendActivity();
-        }
-      }, 30000); // Send activity every 30 seconds
-
-      // Cleanup
-      return () => {
-        clearInterval(connectionInterval);
-        clearInterval(activityInterval);
-        window.removeEventListener('userStatusChange', handleStatusChange as EventListener);
-        socketService.disconnect();
-        setIsConnected(false);
-      };
-    } else {
-      // Disconnect if user is not authenticated
-      socketService.disconnect();
-      setIsConnected(false);
-    }
-  }, [isAuthenticated, user?.id]);
 
   /**
    * Update user status in the context
    */
   const updateUserStatus = (userData: UserStatusData) => {
+    console.log('🔄 Updating user status:', userData);
     setUserStatuses(prev => {
       const newMap = new Map(prev);
       newMap.set(userData.userId, userData);
+      console.log('📊 User statuses updated:', Array.from(newMap.entries()));
       return newMap;
     });
   };
@@ -95,6 +53,97 @@ export function RealtimeProvider({ children }: RealtimeProviderProps) {
       socketService.sendActivity();
     }
   };
+
+  useEffect(() => {
+    if (user?.id) {
+      try {
+        // Use _id if available (MongoDB ObjectId), otherwise use id
+        const userId = user._id || user.id;
+        console.log('Connecting to Socket.IO with userId:', userId);
+        
+        // Test backend connectivity first
+        const testBackendConnection = async () => {
+          try {
+            const response = await fetch('http://localhost:5000/api/health');
+            const data = await response.json();
+            console.log('Backend health check:', data);
+            
+            if (data.success) {
+              // Backend is running, connect to Socket.IO
+              socketService.connect(userId);
+            } else {
+              console.error('Backend health check failed');
+              setIsConnected(false);
+            }
+          } catch (error) {
+            console.error('Backend connection test failed:', error);
+            setIsConnected(false);
+          }
+        };
+      
+      testBackendConnection();
+
+      // Listen for connection status changes
+      const checkConnection = () => {
+        const connected = socketService.isConnected();
+        setIsConnected(connected);
+        console.log('Socket connection status:', connected);
+      };
+
+      // Initial connection check
+      checkConnection();
+
+      // Check connection status periodically
+      const connectionInterval = setInterval(checkConnection, 2000);
+
+      // Listen for user status changes
+      const handleStatusChange = (event: CustomEvent) => {
+        const userData = event.detail as UserStatusData;
+        console.log('📡 Received user status change event:', userData);
+        updateUserStatus(userData);
+      };
+
+      // Listen for bulk user updates
+      const handleBulkUpdate = (event: CustomEvent) => {
+        const usersData = event.detail as UserStatusData[];
+        console.log('📡 Received bulk user update event:', usersData.length, 'users');
+        if (Array.isArray(usersData)) {
+          usersData.forEach(userData => {
+            console.log('📡 Processing bulk update for user:', userData);
+            updateUserStatus(userData);
+          });
+        }
+      };
+
+      window.addEventListener('userStatusChange', handleStatusChange as EventListener);
+      window.addEventListener('bulkUserUpdate', handleBulkUpdate as EventListener);
+
+      // Send periodic activity heartbeat
+      const activityInterval = setInterval(() => {
+        if (socketService.isConnected()) {
+          socketService.sendActivity();
+        }
+      }, 30000); // Send activity every 30 seconds
+
+      // Cleanup
+        return () => {
+          clearInterval(connectionInterval);
+          clearInterval(activityInterval);
+          window.removeEventListener('userStatusChange', handleStatusChange as EventListener);
+          window.removeEventListener('bulkUserUpdate', handleBulkUpdate as EventListener);
+          socketService.disconnect();
+          setIsConnected(false);
+        };
+      } catch (error) {
+        console.error('RealtimeProvider error:', error);
+        setIsConnected(false);
+      }
+    } else {
+      // Disconnect if user is not authenticated
+      socketService.disconnect();
+      setIsConnected(false);
+    }
+  }, [user?.id]);
 
   const value: RealtimeContextType = {
     isConnected,

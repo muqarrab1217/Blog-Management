@@ -21,6 +21,7 @@ class SocketService {
       return;
     }
 
+    console.log('🔌 Attempting to connect to Socket.IO server with userId:', userId);
     this.userId = userId;
     
     // Initialize socket connection
@@ -43,6 +44,8 @@ class SocketService {
     // Connection established
     this.socket.on('connect', () => {
       console.log('🔌 Connected to Socket.IO server');
+      console.log('Socket ID:', this.socket?.id);
+      console.log('User ID:', this.userId);
       this.reconnectAttempts = 0;
     });
 
@@ -59,13 +62,27 @@ class SocketService {
     // Connection error
     this.socket.on('connect_error', (error) => {
       console.error('❌ Socket connection error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
       this.attemptReconnect();
     });
 
     // User status change event
     this.socket.on('user_status_change', (userData) => {
-      console.log('👤 User status changed:', userData);
+      console.log('👤 User status changed from backend:', userData);
       this.handleUserStatusChange(userData);
+    });
+
+    // Periodic online users update
+    this.socket.on('online_users_update', (usersData) => {
+      console.log('👥 Online users update from backend:', usersData.length, 'users');
+      console.log('👥 Users data:', usersData);
+      // Emit bulk update event for better performance
+      const event = new CustomEvent('bulkUserUpdate', { detail: usersData });
+      window.dispatchEvent(event);
     });
   }
 
